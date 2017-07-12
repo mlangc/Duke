@@ -1,8 +1,10 @@
 
 package no.priv.garshol.duke.databases;
 
+import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.Filter;
 import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.search.Query;
 import org.apache.lucene.spatial.SpatialStrategy;
 import org.apache.lucene.spatial.query.SpatialArgs;
 import org.apache.lucene.spatial.query.SpatialOperation;
@@ -54,13 +56,13 @@ public class GeoProperty {
   /**
    * Returns a geoquery.
    */
-  public Filter geoSearch(String value) {
+  public Query geoSearch(String value) {
     GeopositionComparator comp = (GeopositionComparator) prop.getComparator();
     double dist = comp.getMaxDistance();
     double degrees = DistanceUtils.dist2Degrees(dist, DistanceUtils.EARTH_MEAN_RADIUS_KM * 1000.0);
     Shape circle = spatialctx.makeCircle(parsePoint(value), degrees);
     SpatialArgs args = new SpatialArgs(SpatialOperation.Intersects, circle);
-    return strategy.makeFilter(args);
+    return strategy.makeQuery(args);
   }
   
   /**

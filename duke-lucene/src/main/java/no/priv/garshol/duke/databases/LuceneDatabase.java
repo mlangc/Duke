@@ -4,6 +4,7 @@ package no.priv.garshol.duke.databases;
 import java.io.File;
 import java.io.IOException;
 import java.io.StringReader;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -32,15 +33,8 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.search.*;
 import org.apache.lucene.search.BooleanClause.Occur;
-import org.apache.lucene.search.BooleanQuery;
-import org.apache.lucene.search.Filter;
-import org.apache.lucene.search.FuzzyQuery;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.MatchAllDocsQuery;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.NIOFSDirectory;
@@ -74,7 +68,7 @@ public class LuceneDatabase implements Database {
   private GeoProperty geoprop;
 
   public LuceneDatabase() {
-    this.analyzer = new StandardAnalyzer(Version.LUCENE_CURRENT);
+    this.analyzer = new StandardAnalyzer();
     this.maintracker = new EstimateResultTracker();
     this.max_search_hits = 1000000;
     this.fuzzy_search = true; // on by default
@@ -262,7 +256,7 @@ public class LuceneDatabase implements Database {
     if (geoprop != null) {
       String value = record.getValue(geoprop.getName());
       if (value != null) {
-        Filter filter = geoprop.geoSearch(value);
+        Query filter = geoprop.geoSearch(value);
         return maintracker.doQuery(new MatchAllDocsQuery(), filter);
       }
     }
@@ -332,13 +326,12 @@ public class LuceneDatabase implements Database {
           // as per http://wiki.apache.org/lucene-java/ImproveSearchingSpeed
           // we use NIOFSDirectory, provided we're not on Windows
           if (Utils.isWindowsOS())
-            directory = FSDirectory.open(new File(path));
+            directory = FSDirectory.open(Paths.get(path));
           else
-            directory = NIOFSDirectory.open(new File(path));
+            directory = NIOFSDirectory.open(Paths.get(path));
         }
 
-        IndexWriterConfig cfg =
-          new IndexWriterConfig(Version.LUCENE_CURRENT, analyzer);
+        IndexWriterConfig cfg = new IndexWriterConfig(analyzer);
         cfg.setOpenMode(overwrite ? IndexWriterConfig.OpenMode.CREATE :
                                     IndexWriterConfig.OpenMode.APPEND);
         iwriter = new IndexWriter(directory, cfg);
@@ -404,8 +397,10 @@ public class LuceneDatabase implements Database {
       return;
 
     try {
+      StandardAnalyzer localAnalyzer = new StandardAnalyzer();
       TokenStream tokenStream =
-        analyzer.tokenStream(fieldName, new StringReader(value));
+        localAnalyzer.tokenStream(fieldName, new StringReader(value));
+
       tokenStream.reset();
       CharTermAttribute attr =
         tokenStream.getAttribute(CharTermAttribute.class);
@@ -484,14 +479,18 @@ public class LuceneDatabase implements Database {
       return doQuery(query, null);
     }
 
-    public Collection<Record> doQuery(Query query, Filter filter) {
+    public Collection<Record> doQuery(Query query, Query filter) {
       List<Record> matches;
       try {
         ScoreDoc[] hits;
 
         int thislimit = Math.min(limit, max_search_hits);
         while (true) {
-          hits = searcher.search(query, filter, thislimit).scoreDocs;
+          BooleanQuery.Builder searchQueryBuilder = new BooleanQuery.Builder().add(query, Occur.MUST);
+          if (filter != null)
+            searchQueryBuilder.add(filter, Occur.FILTER);
+
+          hits = searcher.search(searchQueryBuilder.build(), thislimit).scoreDocs;
           if (hits.length < thislimit || thislimit == max_search_hits)
             break;
           thislimit = thislimit * 5;
