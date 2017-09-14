@@ -602,10 +602,13 @@ public class Processor {
         for (String v2 : vs2) {
           if (v2.equals("")) // FIXME: these values shouldn't be here at all
             continue;
-
           try {
             double p = prop.compare(v1, v2);
             high = Math.max(high, p);
+
+            if (logger.isTraceEnabled()) {
+              logger.trace(String.format("  %1.2f <- %s [Comparing '%s' with '%s']", high, propname, v1, v2));
+            }
           } catch (Exception e) {
             throw new DukeException("Comparison of values '" + v1 + "' and "+
                                     "'" + v2 + "' with " +
@@ -615,7 +618,13 @@ public class Processor {
       }
 
       prob = Utils.computeBayes(prob, high);
+
     }
+
+    if (logger.isTraceEnabled()) {
+      logger.trace(String.format("%1.2f <- Comparing %s with %s", prob, r2, r1));
+    }
+
     return prob;
   }
 
